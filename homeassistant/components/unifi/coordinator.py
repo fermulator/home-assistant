@@ -61,6 +61,7 @@ class UnifiDataUpdateCoordinator[HandlerT: APIHandler](
         )
         self._handler = handler
         self._supports_websocket = supports_websocket
+        self._hub = hub
         self._connection = hub.connection
         self._disable_polling_on_endpoint_not_found = (
             disable_polling_on_endpoint_not_found
@@ -72,6 +73,11 @@ class UnifiDataUpdateCoordinator[HandlerT: APIHandler](
         hub.config.entry.async_on_unload(
             async_dispatcher_connect(
                 hub.hass, hub.signal_reachable, self._async_reachable_changed
+            )
+        )
+        hub.config.entry.async_on_unload(
+            async_dispatcher_connect(
+                hub.hass, hub.signal_options_update, self._async_options_updated
             )
         )
 
@@ -109,6 +115,27 @@ class UnifiDataUpdateCoordinator[HandlerT: APIHandler](
         if self.update_interval is not None:
             self.update_interval = (
                 POLL_INTERVAL if self._handler.items() else IDLE_POLL_INTERVAL
+            )
+
+    @callback
+    def _async_options_updated(self) -> None:
+        """Apply disable_polling_on_endpoint_not_found option changes."""
+        disable_polling = self._hub.config.option_disable_polling_on_endpoint_not_found
+        if disable_polling == self._disable_polling_on_endpoint_not_found:
+            return
+        self._disable_polling_on_endpoint_not_found = disable_polling
+        if (
+            not disable_polling
+            and not self._supports_websocket
+            and self.update_interval is None
+        ):
+            # EndpointNotFound disabled polling, restore it
+            self._endpoint_not_found_logged = False
+            self.update_interval = (
+                POLL_INTERVAL if self._handler.items() else IDLE_POLL_INTERVAL
+            )
+            self._connection.config_entry.async_create_background_task(
+                self.hass, self.async_refresh(), f"unifi_refresh_{self.name}"
             )
 
     @callback

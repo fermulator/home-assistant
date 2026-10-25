@@ -47,6 +47,7 @@ from .const import (
     CONF_BLOCK_CLIENT,
     CONF_CLIENT_SOURCE,
     CONF_DETECTION_TIME,
+    CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
     CONF_DPI_RESTRICTIONS,
     CONF_IGNORE_LOCAL_MAC,
     CONF_IGNORE_WIRED_BUG,
@@ -385,6 +386,10 @@ class UnifiOptionsFlowHandler(OptionsFlow):
             ssid for ssid in self.hub.config.option_ssid_filter if ssid in ssid_filter
         ]
 
+        disable_polling_on_endpoint_not_found = (
+            self.hub.config.option_disable_polling_on_endpoint_not_found
+        )
+
         return self.async_show_form(
             step_id="init",
             data_schema=probatio.Schema(
@@ -435,6 +440,10 @@ class UnifiOptionsFlowHandler(OptionsFlow):
                                 probatio.Optional(
                                     CONF_IGNORE_LOCAL_MAC,
                                     default=self.hub.config.option_ignore_local_mac,
+                                ): bool,
+                                probatio.Optional(
+                                    CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
+                                    default=disable_polling_on_endpoint_not_found,
                                 ): bool,
                                 probatio.Optional(
                                     CONF_DPI_RESTRICTIONS,
