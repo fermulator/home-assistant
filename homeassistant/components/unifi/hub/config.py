@@ -20,6 +20,7 @@ from ..const import (
     CONF_BLOCK_CLIENT,
     CONF_CLIENT_SOURCE,
     CONF_DETECTION_TIME,
+    CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
     CONF_DPI_RESTRICTIONS,
     CONF_IGNORE_LOCAL_MAC,
     CONF_IGNORE_WIRED_BUG,
@@ -31,6 +32,7 @@ from ..const import (
     DEFAULT_ALLOW_BANDWIDTH_SENSORS,
     DEFAULT_ALLOW_UPTIME_SENSORS,
     DEFAULT_DETECTION_TIME,
+    DEFAULT_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
     DEFAULT_DPI_RESTRICTIONS,
     DEFAULT_IGNORE_LOCAL_MAC,
     DEFAULT_IGNORE_WIRED_BUG,
@@ -87,6 +89,11 @@ class UnifiConfig:
     option_allow_uptime_sensors: bool
     """Config entry option to allow uptime sensors."""
 
+    # Polling options
+
+    option_disable_polling_on_endpoint_not_found: bool
+    """Config entry option to stop polling endpoints unavailable on the controller."""
+
     @classmethod
     def from_config_entry(cls, config_entry: ConfigEntry) -> Self:
         """Create object from config entry."""
@@ -125,5 +132,9 @@ class UnifiConfig:
             ),
             option_allow_uptime_sensors=options.get(
                 CONF_ALLOW_UPTIME_SENSORS, DEFAULT_ALLOW_UPTIME_SENSORS
+            ),
+            option_disable_polling_on_endpoint_not_found=options.get(
+                CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
+                DEFAULT_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
             ),
         )

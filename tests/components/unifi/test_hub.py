@@ -16,7 +16,11 @@ from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.components.unifi.const import CONF_BLOCK_CLIENT, DOMAIN
+from homeassistant.components.unifi.const import (
+    CONF_BLOCK_CLIENT,
+    CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND,
+    DOMAIN,
+)
 from homeassistant.components.unifi.coordinator import (
     IDLE_POLL_INTERVAL,
     POLL_INTERVAL,
@@ -202,6 +206,105 @@ async def test_endpoint_not_found_disables_optional_endpoint_polling(
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    "config_entry_options", [{CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND: False}]
+)
+@pytest.mark.parametrize(
+    "handler_name",
+    [
+        "object_oriented_network_configs",
+        "firewall_policies",
+        "traffic_rules",
+        "traffic_routes",
+    ],
+)
+async def test_endpoint_not_found_keeps_polling_when_option_disabled(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    config_entry_setup: MockConfigEntry,
+    handler_name: str,
+) -> None:
+    """Ensure polling continues on unavailable endpoints when the option is off."""
+    loader = config_entry_setup.runtime_data.entity_loader
+    api = config_entry_setup.runtime_data.api
+    handler = getattr(api, handler_name)
+    coordinator = loader.get_data_update_coordinator(handler)
+
+    with patch.object(
+        handler, "update", side_effect=EndpointNotFound("endpoint not found")
+    ) as mock_update:
+        async_fire_time_changed(hass, dt_util.utcnow() + IDLE_POLL_INTERVAL)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert coordinator.update_interval == IDLE_POLL_INTERVAL
+        assert coordinator.last_update_success is False
+        assert mock_update.call_count == 1
+
+        async_fire_time_changed(hass, dt_util.utcnow() + IDLE_POLL_INTERVAL)
+        await hass.async_block_till_done()
+
+        assert mock_update.call_count == 2
+
+    assert (
+        caplog.text.count(
+            f"UniFi {type(handler).__name__} endpoint is unavailable; disabling polling"
+        )
+        == 0
+    )
+
+
+async def test_option_change_updates_endpoint_not_found_polling(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    config_entry_setup: MockConfigEntry,
+) -> None:
+    """Ensure option changes resume or re-disable polling live."""
+    config_entry = config_entry_setup
+    loader = config_entry.runtime_data.entity_loader
+    handler = config_entry.runtime_data.api.firewall_policies
+    coordinator = loader.get_data_update_coordinator(handler)
+    warning = (
+        f"UniFi {type(handler).__name__} endpoint is unavailable; disabling polling"
+    )
+
+    with patch.object(
+        handler, "update", side_effect=EndpointNotFound("endpoint not found")
+    ) as mock_update:
+        async_fire_time_changed(hass, dt_util.utcnow() + IDLE_POLL_INTERVAL)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert coordinator.update_interval is None
+        assert caplog.text.count(warning) == 1
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options={CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND: False},
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        # Unticking resumes polling, the recovery refresh fails again
+        assert coordinator.update_interval == IDLE_POLL_INTERVAL
+        assert mock_update.call_count == 2
+        assert caplog.text.count(warning) == 1
+
+        async_fire_time_changed(hass, dt_util.utcnow() + IDLE_POLL_INTERVAL)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert mock_update.call_count == 3
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options={CONF_DISABLE_POLLING_ON_ENDPOINT_NOT_FOUND: True},
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        async_fire_time_changed(hass, dt_util.utcnow() + IDLE_POLL_INTERVAL)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert coordinator.update_interval is None
+        assert caplog.text.count(warning) == 2
 
 
 @pytest.mark.parametrize(
